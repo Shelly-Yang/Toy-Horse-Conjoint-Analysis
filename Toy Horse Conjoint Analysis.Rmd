@@ -148,14 +148,7 @@ colnames(rankdata) = paste0('profile',1:16)
 for(j in 1:200){
     rankdata[j,]=fulldata$ratings[fulldata$ID==j]
 }
-#simulates decisions for a market scenario using first choice disaggregate choice model
-##Arguments:
-##  scen, the scenario consisting of a set of options (columns) to simulate decisions over. Takes variable names, numerical indexes, or boolean
-##  data, matrix or data.frame of rank order data (1 best) with nrow=#cases and ncol=#options
-##  ascend=TRUE, whether the rank order is ascending meaning lower ranks ar more preferred. 
-##Return:
-##  data.frame of decisions with nrow=nrow(data), ncol=length(scen) 
-##    containing 1 or 0 and each row summing to 1 (one-hot encoding or dummy coded)
+
 simFCDecisions = function(scen,data,ascend=FALSE){ 
   inmkt = data[,scen] #construct the subsetted matrix of options
   bestOpts <- matrix(NA,nrow=200,ncol=ncol(inmkt))
