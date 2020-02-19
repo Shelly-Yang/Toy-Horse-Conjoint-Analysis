@@ -171,12 +171,12 @@ simFCDecisions = function(scen,data,ascend=FALSE){
 
 ```{r}
 calcUnitShares = function(decisions){
-  colSums(decisions)/sum(decisions) #assumes that total decisions is market size
+  colSums(decisions)/sum(decisions) 
 }
 
 simFCShares=function(scen,rankdata,ascend=F){
-  decs = simFCDecisions(scen,rankdata,ascend) #determine decisions
-  calcUnitShares(decs) #calculate shares and return
+  decs = simFCDecisions(scen,rankdata,ascend)
+  calcUnitShares(decs) 
 }
 statusQuo=c(5,7,13)
 out = simFCDecisions(statusQuo,rankdata)
@@ -186,13 +186,13 @@ simFCShares(statusQuo,rankdata) # 0.22*4000*(111.99-33)+0.21*4000*(111.99-33)-20
 
 
 ```{r}
-##Set up scenarios.  Here in this case we assume that companies just have one time to take action, no second,third,.... chance to react(because if react continuously, we have to calculate new cost for new products lauching, here we have 20000/3 for products not in existing set, but we do not have cost data for new "not existing products").
+##Set up scenarios. high-high
 scens = list()
 scens[[1]]=c(7,3,13,15)      
 scens[[2]]=c(7,3,15)   
 scens[[3]]=c(7,3,13)        
 scens[[4]]=c(7,13,15) 
-### they betray us first, they only have one product to choose to drop price, we react with differnt low-price products combination, so we list all possibilitis except all low prices###
+### they betray us first. high-low
 scens[[5]]=c(8,3,13,15)      
 scens[[6]]=c(8,3,15)   
 scens[[7]]=c(8,3,13)        
@@ -209,7 +209,7 @@ scens[[17]]=c(8,4,13)
 scens[[18]]=c(8,3,14)
 scens[[19]]=c(8,13,16)
 scens[[20]]=c(8,14,15)
-## we betray them first, we could drop prices of only one, or 2, or all 3 products. so we list all possibilities ##
+## we betray them first. low-high
 scens[[21]] = c(7,4,15)
 scens[[22]] = c(7,3,16)
 scens[[23]] = c(7,4,16)  
@@ -226,7 +226,7 @@ scens[[33]] = c(7,4,14,15)
 scens[[34]] = c(7,4,13,16) 
 scens[[35]] = c(7,3,14,16)
 scens[[36]] = c(7,4,14,16) 
-# Drop all products prices together. 
+# Drop all products prices together. low-low
 scens[[37]] = c(8,4,14,16)
 scens[[38]] = c(8,4,14)
 scens[[39]] = c(8,14,16)
