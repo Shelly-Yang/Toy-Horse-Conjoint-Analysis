@@ -1,0 +1,384 @@
+---
+title: "Conjoint Analysis - Toy Horse Case"
+author: "Tong Niu, Zhaohui Li, Yunqing Yu, Qiqi Liu, Xiao Yang"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+######## load library & data ############
+```{r}
+rm(list=ls())
+library(cluster)
+library(fpc)
+library(factoextra)
+library(gridExtra)
+library(conjoint)
+setwd("~/Desktop/analytics design/HORSE")
+load('GBA424 - Toy Horse Case Data.Rdata')
+```
+######## A. stimate the conjoint model at the individual level################
+1.part-utilities
+
+delete NA, profile 3,6,10,16
+```{r}
+df <- na.omit(conjointData)
+```
+
+create partworths
+```{r}
+partworths <- matrix(NA,nrow=nrow(respondentData),ncol=5)
+for(i in 1:max(conjointData$ID)){ 
+    partworths[i,]=lm(ratings~price+size+motion+style,data=df,subset=(ID==i))$coef
+}
+colnames(partworths) = c("Intercept","price","size","motion","style")
+```
+
+
+2.predictions for missing profiles
+```{r}
+fulldata <- conjointData
+fullpartworths = matrix(rep(partworths,each=nrow(profilesData)),ncol=5)
+intercept <- rep(1,nrow(conjointData))
+x<-cbind(intercept,fulldata[,4:7])
+
+fullratings = rowSums(x*fullpartworths) 
+
+for (i in 1:nrow(fulldata)) {
+    if (is.na(fulldata$ratings[i]) == T){
+        fulldata$ratings[i] = fullratings[i]
+    }
+} 
+
+fulldata
+```
+
+
+######### B.Conduct Benefit Segmentation via Cluster Analysis of Conjoint Part-Utilities##########
+
+```{r}
+clustTest = function(toClust,print=TRUE,scale=TRUE,maxClusts=15,seed=12345,nstart=20,iter.max=100){
+    if(scale){ toClust = scale(toClust);}
+    set.seed(seed);   # set random number seed before doing cluster analysis
+    wss <- (nrow(toClust)-1)*sum(apply(toClust,2,var))
+    for (i in 2:maxClusts) wss[i] <- sum(kmeans(toClust,centers=i,nstart=nstart,iter.max=iter.max)$withinss)
+    ##gpw essentially does the following plot using wss above. 
+    #plot(1:maxClusts, wss, type="b", xlab="Number of Clusters",ylab="Within groups sum of squares")
+    gpw = fviz_nbclust(toClust,kmeans,method="wss",iter.max=iter.max,nstart=nstart,k.max=maxClusts) 
+    pm1 = pamk(toClust,scaling=TRUE)
+
+    gps = fviz_nbclust(toClust,kmeans,method="silhouette",iter.max=iter.max,nstart=nstart,k.max=maxClusts) 
+    if(print){
+        grid.arrange(gpw,gps, nrow = 1)
+    }
+    list(wss=wss,pm1=pm1$nc,gpw=gpw,gps=gps)
+}
+
+runClusts = function(toClust,nClusts,print=TRUE,maxClusts=15,seed=12345,nstart=20,iter.max=100){
+    if(length(nClusts)>4){
+        warning("Using only first 4 elements of nClusts.")
+    }
+    kms=list(); ps=list();
+    for(i in 1:4){
+        kms[[i]] = kmeans(toClust,nClusts[i],iter.max = iter.max, nstart=nstart)
+        ps[[i]] = fviz_cluster(kms[[i]], geom = "point", data = toClust) + ggtitle(paste("k =",nClusts[i]))
+        
+    }
+    library(gridExtra)
+    if(print){
+        tmp = marrangeGrob(ps, nrow = 2,ncol=2)
+        print(tmp)
+    }
+    list(kms=kms,ps=ps)
+}
+
+plotClust = function(km,toClust,discPlot=FALSE){
+    nc = length(km$size)
+    if(discPlot){par(mfrow=c(2,2))}
+    else {par(mfrow=c(3,1))}
+    percsize = paste(1:nc," = ",format(km$size/sum(km$size)*100,digits=2),"%",sep="")
+    pie(km$size,labels=percsize,col=1:nc)
+    
+    clusplot(toClust, km$cluster, color=TRUE, shade=TRUE,
+             labels=2, lines=0,col.clus=1:nc); #plot clusters against principal components
+    
+    if(discPlot){
+        plotcluster(toClust, km$cluster,col=km$cluster); #plot against discriminant functions ()
+    }
+    rng = range(km$centers)
+    dist = rng[2]-rng[1]
+    locs = km$centers+.05*dist*ifelse(km$centers>0,1,-1)
+    bm = barplot(km$centers,beside=TRUE,col=1:nc,main="Cluster Means",ylim=rng+dist*c(-.1,.1))
+    text(bm,locs,formatC(km$centers,format="f",digits=1))
+}
+
+checks = clustTest(partworths,print=TRUE,scale=TRUE,maxClusts = 15,seed=12345,nstart=20,iter.max=100)
+clusts=runClusts(partworths,c(2,3,4,5),print=TRUE,maxClusts=15,seed=12345,nstart=20,iter.max=100)
+for(i in 1:4) plotClust(clusts[[1]][[i]],partworths)
+```
+optimal number of cluster=3
+
+############ C.	Conduct a priori segmentation ##############
+
+by age
+```{r}
+fulldf <- merge(df,respondentData,by='ID')
+summary(lm(ratings~(price+size+motion+style)*age,data=fulldf))
+summary(lm(ratings~price+size+motion+style,data=fulldf,subset=(age==0))) # 2 yrs old
+summary(lm(ratings~price+size+motion+style,data=fulldf,subset=(age==1))) # 3-4 yrs old
+
+```
+
+
+by gender
+```{r}
+summary(lm(ratings~(price+size+motion+style)*gender,data=fulldf))
+summary(lm(ratings~price+size+motion+style,data=fulldf,subset=(gender==0))) # male 
+summary(lm(ratings~price+size+motion+style,data=fulldf,subset=(gender==1))) #female  
+
+```
+
+
+#################D. Simulate market shares for different product-line scenarios##############
+```{r}
+rankdata = as.data.frame(matrix(nrow = 200, ncol = 16))
+colnames(rankdata) = paste0('profile',1:16)
+for(j in 1:200){
+    rankdata[j,]=fulldata$ratings[fulldata$ID==j]
+}
+#simulates decisions for a market scenario using first choice disaggregate choice model
+##Arguments:
+##  scen, the scenario consisting of a set of options (columns) to simulate decisions over. Takes variable names, numerical indexes, or boolean
+##  data, matrix or data.frame of rank order data (1 best) with nrow=#cases and ncol=#options
+##  ascend=TRUE, whether the rank order is ascending meaning lower ranks ar more preferred. 
+##Return:
+##  data.frame of decisions with nrow=nrow(data), ncol=length(scen) 
+##    containing 1 or 0 and each row summing to 1 (one-hot encoding or dummy coded)
+simFCDecisions = function(scen,data,ascend=FALSE){ 
+  inmkt = data[,scen] #construct the subsetted matrix of options
+  bestOpts <- matrix(NA,nrow=200,ncol=ncol(inmkt))
+  if(ascend){ #if ranks 1 is best 
+    for(i in 1:200){
+      bestOpts[i,]=as.integer(inmkt[i,]==min(inmkt[i,]))
+      numoftie=sum(bestOpts[i,])
+      bestOpts[i,]=bestOpts[i,]/numoftie
+    }
+   } else { #else the best rank is the largest number
+    for(i in 1:200){
+      bestOpts[i,]=as.integer(inmkt[i,]==max(inmkt[i,]))
+      numoftie=sum(bestOpts[i,])
+      bestOpts[i,]=bestOpts[i,]/numoftie
+    }
+   }
+  bestOpts=as.data.frame(bestOpts)
+  #ret = as.data.frame(model.matrix(~0+as.factor(bestOpts)))#fill to set of options marked 0 or 1
+  names(bestOpts) = names(inmkt)
+  bestOpts
+}
+```
+
+
+```{r}
+#calculates shares given decisions matrix
+
+calcUnitShares = function(decisions){
+  colSums(decisions)/sum(decisions) #assumes that total decisions is market size
+}
+
+simFCShares=function(scen,rankdata,ascend=F){
+  decs = simFCDecisions(scen,rankdata,ascend) #determine decisions
+  calcUnitShares(decs) #calculate shares and return
+}
+
+
+#i.e
+statusQuo=c(5,7,13)
+out = simFCDecisions(statusQuo,rankdata)
+simFCShares(statusQuo,rankdata) # 0.22*4000*(111.99-33)+0.21*4000*(111.99-33)-20000*2 #0.57*4000*(111.99-41)-20000
+
+```
+
+
+```{r}
+##Set up scenarios.  Here in this case we assume that companies just have one time to take action, no second,third,.... chance to react(because if react continuously, we have to calculate new cost for new products lauching, here we have 20000/3 for products not in existing set, but we do not have cost data for new "not existing products").
+scens = list()
+scens[[1]]=c(7,3,13,15)      
+scens[[2]]=c(7,3,15)   
+scens[[3]]=c(7,3,13)        
+scens[[4]]=c(7,13,15) 
+
+### they betray us first, they only have one product to choose to drop price, we react with differnt low-price products combination, so we list all possibilitis except all low prices###
+scens[[5]]=c(8,3,13,15)      
+scens[[6]]=c(8,3,15)   
+scens[[7]]=c(8,3,13)        
+scens[[8]]=c(8,13,15) 
+scens[[9]]=c(8,4,13,15)
+scens[[10]]=c(8,3,14,15)
+scens[[11]]=c(8,3,13,16)
+scens[[12]]=c(8,3,14,16)
+scens[[13]]=c(8,4,13,16)
+scens[[14]]=c(8,4,14,15)
+scens[[15]]=c(8,4,15)
+scens[[16]]=c(8,3,16)
+scens[[17]]=c(8,4,13)
+scens[[18]]=c(8,3,14)
+scens[[19]]=c(8,13,16)
+scens[[20]]=c(8,14,15)
+## we betray them first, we could drop prices of only one, or 2, or all 3 products. so we list all possibilities ##
+scens[[21]] = c(7,4,15)
+scens[[22]] = c(7,3,16)
+scens[[23]] = c(7,4,16)  
+scens[[24]] = c(7,4,13)
+scens[[25]] = c(7,3,14) 
+scens[[26]] = c(7,4,14) 
+scens[[27]] = c(7,14,15) 
+scens[[28]] = c(7,13,16)
+scens[[29]] = c(7,14,16)
+scens[[30]] = c(7,4,13,15)
+scens[[31]] = c(7,3,14,15)
+scens[[32]] = c(7,3,13,16)
+scens[[33]] = c(7,4,14,15)
+scens[[34]] = c(7,4,13,16) 
+scens[[35]] = c(7,3,14,16)
+scens[[36]] = c(7,4,14,16) 
+
+
+# Drop all products prices together. 
+scens[[37]] = c(8,4,14,16)
+scens[[38]] = c(8,4,14)
+scens[[39]] = c(8,14,16)
+scens[[40]] = c(8,4,16)
+
+share <- sapply(scens,simFCShares,rankdata)
+
+profitMargin = c(0,0,111.99-29,95.99-29,111.99-33,95.99-33,111.99-41,95.99-41,0,0,0,0,111.99-33,95.99-33,111.99-41,95.99-41)
+profit <- c()
+for (j in 1:length(scens)){
+  if (13 %in% scens[[j]] | 14 %in% scens[[j]]){
+    productProfit <- -(length(scens[[j]])-1)*20000 - (length(scens[[j]])-1-1)*20000/3 #fixed cost
+  }
+  else{
+    productProfit <- -(length(scens[[j]])-1)*20000 - (length(scens[[j]])-1)*20000/3 #fixed cost
+  }
+  for (i in 2:length(scens[[j]])){
+     productProfit <- productProfit + share[[j]][[i]]*4000*profitMargin[scens[[j]][[i]]]
+    }
+  profit <- append(profit, productProfit)
+}
+profit
+
+profitCompetSet <- c()
+for (j in 1:length(scens)){
+  profitCompet <- share[[j]][[1]]*4000*profitMargin[scens[[j]][[1]]] - 20000 # assume compet have same cost structure as us
+  profitCompetSet <- append(profitCompetSet, profitCompet)
+}
+profitCompetSet
+```
+
+
+
+
+
+
+
+
+
+
+
+#############appendix - write output into csv###############
+```{r}
+outputBothHighPr = as.data.frame(matrix(nrow = 4, ncol = 4))
+scs <- c(7,3,13,15)
+colnames(outputBothHighPr) = paste0('profile',c(7,3,13,15))
+outputBothHighPr=cbind('scenario'=1:4,outputBothHighPr)
+outputBothHighPr=cbind(outputBothHighPr,profit=profit[1:4])
+outputBothHighPr=cbind(outputBothHighPr,profitCompet=profitCompetSet[1:4])
+for (j in 1:length(scs)){
+  sharePerProf <- c()
+  for (i in 1:4){
+    if (scs[j] %in% scens[[i]]){
+      sharePerProf <- append(sharePerProf, share[[i]][[which(scens[[i]] == scs[j])]])
+    }
+    else {
+      sharePerProf <- append(sharePerProf, NA)
+    }
+  }
+  outputBothHighPr[1+j] <- sharePerProf
+}
+
+write.csv(outputBothHighPr,"outputBothHighPr.csv", row.names = FALSE)
+read.csv("outputBothHighPr.csv")
+
+outputTheyBetray = as.data.frame(matrix(nrow = 16, ncol = 7))
+scs <- c(8,3,4,13,14,15,16)
+colnames(outputTheyBetray) = paste0('profile',scs)
+outputTheyBetray=cbind('scenario'=5:20,outputTheyBetray)
+outputTheyBetray=cbind(outputTheyBetray,profit=profit[5:20])
+outputTheyBetray=cbind(outputTheyBetray,profitCompet=profitCompetSet[5:20])
+for (j in 1:length(scs)){
+  sharePerProf <- c()
+  for (i in 5:20){
+    if (scs[j] %in% scens[[i]]){
+      sharePerProf <- append(sharePerProf, share[[i]][[which(scens[[i]] == scs[j])]])
+    }
+    else {
+      sharePerProf <- append(sharePerProf, NA)
+    }
+  }
+  outputTheyBetray[1+j] <- sharePerProf
+}
+
+write.csv(outputTheyBetray,"outputTheyBetray.csv", row.names = FALSE)
+read.csv("outputTheyBetray.csv")
+
+
+outputWeBetray = as.data.frame(matrix(nrow = 16, ncol = 7))
+scs <- c(7,3,4,13,14,15,16)
+colnames(outputWeBetray) = paste0('profile',scs)
+outputWeBetray=cbind('scenario'=21:36,outputWeBetray)
+outputWeBetray=cbind(outputWeBetray,profit=profit[21:36])
+outputWeBetray=cbind(outputWeBetray,profitCompet=profitCompetSet[21:36])
+for (j in 1:length(scs)){
+  sharePerProf <- c()
+  for (i in 21:36){
+    if (scs[j] %in% scens[[i]]){
+      sharePerProf <- append(sharePerProf, share[[i]][[which(scens[[i]] == scs[j])]])
+    }
+    else {
+      sharePerProf <- append(sharePerProf, NA)
+    }
+  }
+  outputWeBetray[1+j] <- sharePerProf
+}
+
+write.csv(outputWeBetray,"outputWeBetray.csv", row.names = FALSE)
+read.csv("outputWeBetray.csv")
+
+outputBothLowPr = as.data.frame(matrix(nrow = 4, ncol = 4))
+scs <- c(8,4,14,16)
+colnames(outputBothLowPr) = paste0('profile',scs)
+outputBothLowPr=cbind('scenario'=37:40,outputBothLowPr)
+outputBothLowPr=cbind(outputBothLowPr,profit=profit[37:40])
+outputBothLowPr=cbind(outputBothLowPr,profitCompet=profitCompetSet[37:40])
+for (j in 1:length(scs)){
+  sharePerProf <- c()
+  for (i in 37:40){
+    if (scs[j] %in% scens[[i]]){
+      sharePerProf <- append(sharePerProf, share[[i]][[which(scens[[i]] == scs[j])]])
+    }
+    else {
+      sharePerProf <- append(sharePerProf, NA)
+    }
+  }
+  outputBothLowPr[1+j] <- sharePerProf
+}
+
+write.csv(outputBothLowPr,"outputBothLowPr.csv", row.names = FALSE)
+read.csv("outputBothLowPr.csv")
+```
+
+
+write into csv.
+
