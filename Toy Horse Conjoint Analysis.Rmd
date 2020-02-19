@@ -1,6 +1,10 @@
 ---
 title: "Conjoint Analysis - Toy Horse Case"
 author: "Tong Niu, Zhaohui Li, Yunqing Yu, Qiqi Liu, Xiao Yang"
+instructor: |
+  | Mitchell J. Lovett
+  | University of Rochester
+  | GBA424
 output: html_document
 ---
 
